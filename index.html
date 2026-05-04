@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gastos">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <title>Controle de Gastos</title>
+</head>
+<body>
+
+<!-- ░░░ LOADING OVERLAY ░░░ -->
+<div id="loading" class="loading-overlay hidden">
+  <div class="spinner"></div>
+  <p id="loading-text">Analisando documento...</p>
+</div>
+
+<!-- ░░░ CAMERA OVERLAY ░░░ -->
+<div id="camera-overlay" class="camera-overlay hidden">
+  <button id="camera-cancel" class="camera-cancel" aria-label="Cancelar">✕</button>
+  <p class="camera-hint">Posicione o cupom na área iluminada</p>
+  <video id="camera-video" autoplay playsinline muted></video>
+  <div class="camera-guide">
+    <div class="corner-bl"></div>
+    <div class="corner-br"></div>
+  </div>
+  <button id="capture-btn" class="capture-btn" aria-label="Fotografar">
+    <div class="capture-inner"></div>
+  </button>
+  <canvas id="camera-canvas" class="hidden"></canvas>
+</div>
+
+<!-- ░░░ CONFIRM MODAL ░░░ -->
+<div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Confirmar lançamento</h2>
+      <button class="modal-close" id="confirm-cancel" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="preview-thumb" class="preview-thumb hidden">
+        <img id="preview-img" src="" alt="Pré-visualização do documento">
+      </div>
+
+      <label class="form-label" for="confirm-valor">Valor Total</label>
+      <div class="value-input-wrap">
+        <span class="currency-prefix">R$</span>
+        <input type="number" id="confirm-valor" class="form-input value-input"
+               step="0.01" min="0" placeholder="0,00" inputmode="decimal">
+      </div>
+
+      <label class="form-label" for="confirm-estabelecimento">Estabelecimento / Beneficiário</label>
+      <input type="text" id="confirm-estabelecimento" class="form-input" placeholder="Nome do local">
+
+      <label class="form-label" for="confirm-data">Data</label>
+      <input type="date" id="confirm-data" class="form-input">
+
+      <label class="form-label" for="confirm-subcategoria">Subcategoria</label>
+      <input type="text" id="confirm-subcategoria" class="form-input"
+             placeholder="Ex: Mercado, Uber, Netflix…">
+
+      <label class="form-label">Quem pagou?</label>
+      <div class="chip-group" id="person-chips" role="group">
+        <button class="chip active" data-person="João" type="button">👨 João</button>
+        <button class="chip" data-person="Maria" type="button">👩 Maria</button>
+      </div>
+
+      <label class="form-label">Categoria</label>
+      <div class="category-grid" id="category-grid" role="group"></div>
+
+      <button id="save-entry" class="btn-primary full-width" type="button">✓ Salvar lançamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░ MANUAL MODAL ░░░ -->
+<div id="manual-modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>Adicionar manualmente</h2>
+      <button class="modal-close" id="manual-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="form-label" for="manual-valor">Valor Total</label>
+      <div class="value-input-wrap">
+        <span class="currency-prefix">R$</span>
+        <input type="number" id="manual-valor" class="form-input value-input"
+               step="0.01" min="0" placeholder="0,00" inputmode="decimal">
+      </div>
+
+      <label class="form-label" for="manual-estabelecimento">Estabelecimento</label>
+      <input type="text" id="manual-estabelecimento" class="form-input" placeholder="Nome do local">
+
+      <label class="form-label" for="manual-data">Data</label>
+      <input type="date" id="manual-data" class="form-input">
+
+      <label class="form-label" for="manual-subcategoria">Subcategoria</label>
+      <input type="text" id="manual-subcategoria" class="form-input"
+             placeholder="Ex: Mercado, Uber, Netflix…">
+
+      <label class="form-label">Quem pagou?</label>
+      <div class="chip-group" id="manual-person-chips" role="group">
+        <button class="chip active" data-person="João" type="button">👨 João</button>
+        <button class="chip" data-person="Maria" type="button">👩 Maria</button>
+      </div>
+
+      <label class="form-label">Categoria</label>
+      <div class="category-grid" id="manual-category-grid" role="group"></div>
+
+      <button id="save-manual" class="btn-primary full-width" type="button">✓ Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░ SETTINGS MODAL ░░░ -->
+<div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2>⚙️ Configurações</h2>
+      <button class="modal-close" id="settings-close" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="form-label" for="api-key-input">Chave da API Anthropic</label>
+      <input type="password" id="api-key-input" class="form-input" placeholder="sk-ant-api03-…">
+      <p class="hint-text">Salva apenas neste dispositivo. <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Criar chave ↗</a></p>
+      <button id="save-api-key" class="btn-primary full-width" type="button">Salvar chave</button>
+
+      <div class="divider"></div>
+
+      <label class="form-label">Exportar</label>
+      <button id="export-csv-settings" class="btn-secondary full-width" type="button">📥 Exportar CSV</button>
+
+      <div class="divider"></div>
+
+      <label class="form-label">Perigo</label>
+      <button id="clear-data" class="btn-danger full-width" type="button">🗑️ Apagar todos os dados</button>
+    </div>
+  </div>
+</div>
+
+<!-- ░░░ HIDDEN FILE INPUTS ░░░ -->
+<input type="file" id="camera-input"  accept="image/*" capture="environment" class="hidden" aria-hidden="true">
+<input type="file" id="gallery-input" accept="image/*" class="hidden" aria-hidden="true">
+<input type="file" id="pdf-input"     accept="application/pdf" class="hidden" aria-hidden="true">
+
+<!-- ░░░ HISTORY VIEW ░░░ -->
+<div id="history-view" class="full-view hidden">
+  <header class="view-header">
+    <button id="history-back" class="back-btn" type="button">← Voltar</button>
+    <h2>Histórico</h2>
+  </header>
+  <div class="filter-bar">
+    <select id="filter-month" class="filter-select" aria-label="Filtrar por mês">
+      <option value="">Todos os meses</option>
+    </select>
+    <select id="filter-person" class="filter-select" aria-label="Filtrar por pessoa">
+      <option value="">Todas as pessoas</option>
+      <option value="João">João</option>
+      <option value="Maria">Maria</option>
+    </select>
+  </div>
+  <div id="history-list" class="padded" role="list"></div>
+</div>
+
+<!-- ░░░ MAIN APP ░░░ -->
+<div id="app">
+  <header class="app-header">
+    <div class="header-content">
+      <div>
+        <h1 class="app-title">💰 Gastos</h1>
+        <p class="app-subtitle" id="month-label"></p>
+      </div>
+      <button id="settings-btn" class="icon-btn" aria-label="Configurações">⚙️</button>
+    </div>
+    <div class="month-summary" role="status" aria-live="polite">
+      <div class="summary-item">
+        <span class="summary-label">João</span>
+        <span class="summary-value" id="total-joao">R$ 0</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Maria</span>
+        <span class="summary-value" id="total-maria">R$ 0</span>
+      </div>
+      <div class="summary-item total">
+        <span class="summary-label">Total mês</span>
+        <span class="summary-value accent" id="total-mes">R$ 0</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div id="api-banner" class="setup-banner hidden" role="alert">
+      <span>⚠️</span>
+      <span>Configure sua chave da API para usar leitura automática de cupons</span>
+    </div>
+
+    <div class="capture-section">
+      <button id="camera-btn" class="camera-main-btn" aria-label="Fotografar cupom fiscal">
+        <span class="camera-icon">📷</span>
+        <span class="camera-label">Fotografar cupom</span>
+      </button>
+
+      <div class="secondary-btns" role="group" aria-label="Outras formas de entrada">
+        <button id="gallery-btn" class="secondary-btn" type="button">
+          <span>🖼️</span>
+          <span>Galeria</span>
+        </button>
+        <button id="pdf-btn" class="secondary-btn" type="button">
+          <span>📄</span>
+          <span>PDF</span>
+        </button>
+        <button id="manual-btn" class="secondary-btn" type="button">
+          <span>✏️</span>
+          <span>Manual</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h2 class="section-title">Recentes</h2>
+        <button id="view-all-btn" class="text-btn" type="button">Ver todos</button>
+      </div>
+      <div id="recent-list" class="entry-list" role="list">
+        <p class="empty-state" id="empty-state">
+          Nenhum lançamento ainda.<br>Fotografe um cupom para começar! 📸
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegação principal">
+    <button class="nav-item active" id="nav-home" type="button">
+      <span aria-hidden="true">🏠</span>
+      <span>Início</span>
+    </button>
+    <button class="nav-item" id="nav-history" type="button">
+      <span aria-hidden="true">📋</span>
+      <span>Histórico</span>
+    </button>
+    <button class="nav-item" id="nav-export" type="button">
+      <span aria-hidden="true">📥</span>
+      <span>Exportar</span>
+    </button>
+  </nav>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

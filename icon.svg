@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="40" fill="#0d0d1a"/>
+  <!-- Receipt body -->
+  <rect x="50" y="32" width="92" height="128" rx="8" fill="#1a1a2e" stroke="#00d4aa" stroke-width="3"/>
+  <!-- Zigzag bottom -->
+  <polyline points="50,160 56,168 62,160 68,168 74,160 80,168 86,160 92,168 98,160 104,168 110,160 116,168 122,160 128,168 134,160 140,168 142,160" fill="none" stroke="#00d4aa" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Lines -->
+  <rect x="66" y="56" width="60" height="7" rx="3.5" fill="#00d4aa"/>
+  <rect x="66" y="74" width="42" height="5" rx="2.5" fill="#555577"/>
+  <rect x="66" y="88" width="52" height="5" rx="2.5" fill="#555577"/>
+  <rect x="66" y="102" width="36" height="5" rx="2.5" fill="#555577"/>
+  <!-- Total bar -->
+  <rect x="66" y="120" width="60" height="14" rx="6" fill="#00d4aa" opacity="0.2"/>
+  <text x="96" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#00d4aa">R$ —,——</text>
+  <!-- Camera badge -->
+  <circle cx="148" cy="148" r="26" fill="#00d4aa"/>
+  <rect x="137" y="140" width="22" height="16" rx="3" fill="#0d0d1a"/>
+  <circle cx="148" cy="148" r="5" fill="#0d0d1a"/>
+  <rect x="143" y="137" width="8" height="4" rx="1" fill="#0d0d1a"/>
+</svg>
