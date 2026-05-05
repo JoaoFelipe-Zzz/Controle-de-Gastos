@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gastos-v2';
+const CACHE_NAME = 'gastos-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const APP_SHELL = [
   './icon.svg',
 ];
 
+// Instala e pré-cacheia os arquivos do app
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
@@ -15,6 +16,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
+// Remove caches antigas ao ativar nova versão
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -24,19 +26,26 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Estratégia: Network-first → sempre busca da rede, usa cache só se offline
 self.addEventListener('fetch', (e) => {
-  // Never intercept API calls
+  // Nunca intercepta chamadas à API Anthropic
   if (e.request.url.includes('anthropic.com')) return;
+  // Só trata requisições GET
+  if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(e.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') return response;
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+    fetch(e.request)
+      .then((response) => {
+        // Resposta válida: atualiza o cache e retorna
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        }
         return response;
-      }).catch(() => caches.match('./index.html'));
-    })
+      })
+      .catch(() => {
+        // Sem rede: serve do cache (modo offline)
+        return caches.match(e.request).then((cached) => cached || caches.match('./index.html'));
+      })
   );
 });
