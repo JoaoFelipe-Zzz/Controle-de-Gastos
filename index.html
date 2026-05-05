@@ -64,6 +64,24 @@
       <input type="text" id="confirm-subcategoria" class="form-input"
              placeholder="Ex: Mercado, Uber, Netflix…">
 
+      <label class="form-label">Pagamento</label>
+      <div class="chip-group" id="confirm-payment-chips" role="group">
+        <button class="chip active" data-payment="avista" type="button">✓ À vista</button>
+        <button class="chip" data-payment="parcelado" type="button">📅 Parcelado</button>
+      </div>
+
+      <div id="confirm-installment" class="installment-box hidden">
+        <div class="installment-row">
+          <button class="step-btn" id="confirm-dec" type="button">−</button>
+          <div class="step-display">
+            <span id="confirm-count" class="step-num">2</span>
+            <span class="step-label">×</span>
+          </div>
+          <button class="step-btn" id="confirm-inc" type="button">+</button>
+          <span class="step-each" id="confirm-each">= —/mês</span>
+        </div>
+      </div>
+
       <label class="form-label">Quem pagou?</label>
       <div class="chip-group" id="person-chips" role="group">
         <button class="chip active" data-person="João" type="button">👨 João</button>
@@ -102,6 +120,26 @@
       <label class="form-label" for="manual-subcategoria">Subcategoria</label>
       <input type="text" id="manual-subcategoria" class="form-input"
              placeholder="Ex: Mercado, Uber, Netflix…">
+
+      <div id="manual-payment-section">
+        <label class="form-label">Pagamento</label>
+        <div class="chip-group" id="manual-payment-chips" role="group">
+          <button class="chip active" data-payment="avista" type="button">✓ À vista</button>
+          <button class="chip" data-payment="parcelado" type="button">📅 Parcelado</button>
+        </div>
+
+        <div id="manual-installment" class="installment-box hidden">
+          <div class="installment-row">
+            <button class="step-btn" id="manual-dec" type="button">−</button>
+            <div class="step-display">
+              <span id="manual-count" class="step-num">2</span>
+              <span class="step-label">×</span>
+            </div>
+            <button class="step-btn" id="manual-inc" type="button">+</button>
+            <span class="step-each" id="manual-each">= —/mês</span>
+          </div>
+        </div>
+      </div>
 
       <label class="form-label">Quem pagou?</label>
       <div class="chip-group" id="manual-person-chips" role="group">

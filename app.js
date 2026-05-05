@@ -16,6 +16,7 @@ const CATEGORIES = [
   { id: 'MORADIA',     label: 'Moradia',     emoji: '🏠', color: '#3498db', bg: 'rgba(52,152,219,0.15)' },
   { id: 'TRANSPORTE',  label: 'Transporte',  emoji: '🚗', color: '#f39c12', bg: 'rgba(243,156,18,0.15)' },
   { id: 'SAUDE',       label: 'Saúde',       emoji: '💊', color: '#2ecc71', bg: 'rgba(46,204,113,0.15)' },
+  { id: 'PET',         label: 'Pet',         emoji: '🐾', color: '#8bc34a', bg: 'rgba(139,195,74,0.15)' },
   { id: 'LAZER',       label: 'Lazer',       emoji: '🎭', color: '#9b59b6', bg: 'rgba(155,89,182,0.15)' },
   { id: 'ASSINATURAS', label: 'Assinaturas', emoji: '📱', color: '#1abc9c', bg: 'rgba(26,188,156,0.15)' },
   { id: 'VESTUARIO',   label: 'Vestuário',   emoji: '👗', color: '#e91e63', bg: 'rgba(233,30,99,0.15)' },
@@ -35,8 +36,13 @@ let state = {
   currentMimeType: null,
   confirmPerson: 'João',
   confirmCategory: null,
+  confirmPayment: 'avista',   // 'avista' | 'parcelado'
+  confirmParcelas: 2,
   manualPerson: 'João',
   manualCategory: null,
+  manualPayment: 'avista',
+  manualParcelas: 2,
+  editingId: null,            // id da entrada sendo editada (null = novo)
 };
 
 // ============================================================
@@ -58,6 +64,12 @@ function setApiKey(k) { localStorage.setItem(API_KEY_STOR, k); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 function todayISO() { return new Date().toISOString().split('T')[0]; }
+
+function addMonths(isoDate, n) {
+  const d = new Date(isoDate + 'T12:00:00');
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().split('T')[0];
+}
 
 function isoToDisplay(iso) {
   if (!iso) return '';
@@ -349,6 +361,9 @@ function showConfirmModal(data, previewUrl, fileType) {
   state.confirmCategory = data.categoria || null;
   renderCategoryGrid('category-grid', 'confirmCategory');
 
+  // Reset installment
+  resetInstallment('confirm');
+
   openModal('confirm-modal');
 }
 
@@ -361,71 +376,166 @@ function saveConfirmEntry() {
   if (!valor || valor <= 0) { showToast('Informe um valor válido', 'error'); return; }
   if (!estab)               { showToast('Informe o estabelecimento', 'error'); return; }
 
-  const entry = {
+  const isParc = state.confirmPayment === 'parcelado';
+  const n      = isParc ? Math.max(2, state.confirmParcelas) : 1;
+  const vParc  = Math.round((valor / n) * 100) / 100;
+
+  const newEntries = Array.from({ length: n }, (_, i) => ({
     id: uid(),
-    valor,
-    estabelecimento: estab,
-    data,
-    dataDisplay: isoToDisplay(data),
+    valor: vParc,
+    estabelecimento: isParc ? `${estab} (${i + 1}/${n})` : estab,
+    data: addMonths(data, i),
+    dataDisplay: isoToDisplay(addMonths(data, i)),
     categoria: state.confirmCategory || 'OUTROS',
     subcategoria: subcat || 'Outros',
     pessoa: state.confirmPerson,
     tipo: state.currentFileType || 'manual',
-    ts: Date.now(),
-  };
+    parcelado: isParc,
+    ts: Date.now() + i,
+  }));
 
-  state.entries.unshift(entry);
+  state.entries = [...newEntries, ...state.entries];
   saveEntries();
   closeModal('confirm-modal');
   renderRecent();
   updateSummary();
-  showToast('Lançamento salvo! ✓', 'success');
+  showToast(
+    isParc ? `${n}× parcelas salvas (${fmtCurrencyShort(vParc)}/mês) ✓` : 'Lançamento salvo! ✓',
+    'success'
+  );
 }
 
 // ============================================================
 // MANUAL MODAL
 // ============================================================
 function showManualModal() {
-  document.getElementById('manual-valor').value          = '';
+  resetManualModal();
+  document.getElementById('manual-valor').value           = '';
   document.getElementById('manual-estabelecimento').value = '';
-  document.getElementById('manual-data').value           = todayISO();
+  document.getElementById('manual-data').value            = todayISO();
   document.getElementById('manual-subcategoria').value    = '';
   state.manualPerson   = 'João';
   state.manualCategory = null;
   setChips('manual-person-chips', 'manualPerson', 'João');
   renderCategoryGrid('manual-category-grid', 'manualCategory');
+  resetInstallment('manual');
   state.currentFileType = 'manual';
   openModal('manual-modal');
 }
 
 function saveManualEntry() {
-  const valor = parseFloat(document.getElementById('manual-valor').value);
-  const estab = document.getElementById('manual-estabelecimento').value.trim();
-  const data  = document.getElementById('manual-data').value;
+  const valor  = parseFloat(document.getElementById('manual-valor').value);
+  const estab  = document.getElementById('manual-estabelecimento').value.trim();
+  const data   = document.getElementById('manual-data').value;
   const subcat = document.getElementById('manual-subcategoria').value.trim();
 
   if (!valor || valor <= 0) { showToast('Informe um valor válido', 'error'); return; }
   if (!estab)               { showToast('Informe o estabelecimento', 'error'); return; }
 
-  const entry = {
+  // ── EDIT MODE ──
+  if (state.editingId) {
+    const idx = state.entries.findIndex(e => e.id === state.editingId);
+    if (idx !== -1) {
+      state.entries[idx] = {
+        ...state.entries[idx],
+        valor,
+        estabelecimento: estab,
+        data,
+        dataDisplay: isoToDisplay(data),
+        categoria: state.manualCategory || state.entries[idx].categoria,
+        subcategoria: subcat || 'Outros',
+        pessoa: state.manualPerson,
+      };
+    }
+    saveEntries();
+    closeModal('manual-modal');
+    resetManualModal();
+    renderRecent();
+    updateSummary();
+    if (!document.getElementById('history-view').classList.contains('hidden')) {
+      renderHistory();
+    }
+    showToast('Lançamento atualizado! ✓', 'success');
+    return;
+  }
+
+  // ── NEW ENTRY MODE ──
+  const isParc = state.manualPayment === 'parcelado';
+  const n      = isParc ? Math.max(2, state.manualParcelas) : 1;
+  const vParc  = Math.round((valor / n) * 100) / 100;
+
+  const newEntries = Array.from({ length: n }, (_, i) => ({
     id: uid(),
-    valor,
-    estabelecimento: estab,
-    data,
-    dataDisplay: isoToDisplay(data),
+    valor: vParc,
+    estabelecimento: isParc ? `${estab} (${i + 1}/${n})` : estab,
+    data: addMonths(data, i),
+    dataDisplay: isoToDisplay(addMonths(data, i)),
     categoria: state.manualCategory || 'OUTROS',
     subcategoria: subcat || 'Outros',
     pessoa: state.manualPerson,
     tipo: 'manual',
-    ts: Date.now(),
-  };
+    parcelado: isParc,
+    ts: Date.now() + i,
+  }));
 
-  state.entries.unshift(entry);
+  state.entries = [...newEntries, ...state.entries];
   saveEntries();
   closeModal('manual-modal');
   renderRecent();
   updateSummary();
-  showToast('Lançamento salvo! ✓', 'success');
+  showToast(
+    isParc ? `${n}× parcelas salvas (${fmtCurrencyShort(vParc)}/mês) ✓` : 'Lançamento salvo! ✓',
+    'success'
+  );
+}
+
+// ============================================================
+// INSTALLMENT HELPERS
+// ============================================================
+function resetInstallment(prefix) {
+  const payKey  = prefix === 'confirm' ? 'confirmPayment'  : 'manualPayment';
+  const parcKey = prefix === 'confirm' ? 'confirmParcelas' : 'manualParcelas';
+  state[payKey]  = 'avista';
+  state[parcKey] = 2;
+  document.querySelectorAll(`#${prefix}-payment-chips .chip`)
+    .forEach((c, i) => c.classList.toggle('active', i === 0));
+  document.getElementById(`${prefix}-installment`).classList.add('hidden');
+  document.getElementById(`${prefix}-count`).textContent = '2';
+  document.getElementById(`${prefix}-each`).textContent  = '= —/mês';
+}
+
+function bindInstallment(prefix) {
+  const payKey   = prefix === 'confirm' ? 'confirmPayment'  : 'manualPayment';
+  const parcKey  = prefix === 'confirm' ? 'confirmParcelas' : 'manualParcelas';
+  const valorEl  = document.getElementById(`${prefix}-valor`);
+  const countEl  = document.getElementById(`${prefix}-count`);
+  const eachEl   = document.getElementById(`${prefix}-each`);
+  const box      = document.getElementById(`${prefix}-installment`);
+
+  function refreshEach() {
+    const val = parseFloat(valorEl.value) || 0;
+    eachEl.textContent = val > 0
+      ? `= ${fmtCurrencyShort(val / state[parcKey])}/mês`
+      : '= —/mês';
+  }
+
+  document.getElementById(`${prefix}-payment-chips`).addEventListener('click', e => {
+    const chip = e.target.closest('.chip[data-payment]');
+    if (!chip) return;
+    state[payKey] = chip.dataset.payment;
+    document.querySelectorAll(`#${prefix}-payment-chips .chip`)
+      .forEach(c => c.classList.toggle('active', c === chip));
+    box.classList.toggle('hidden', state[payKey] !== 'parcelado');
+    refreshEach();
+  });
+
+  document.getElementById(`${prefix}-dec`).addEventListener('click', () => {
+    if (state[parcKey] > 2) { state[parcKey]--; countEl.textContent = state[parcKey]; refreshEach(); }
+  });
+  document.getElementById(`${prefix}-inc`).addEventListener('click', () => {
+    if (state[parcKey] < 48) { state[parcKey]++; countEl.textContent = state[parcKey]; refreshEach(); }
+  });
+  valorEl.addEventListener('input', refreshEach);
 }
 
 // ============================================================
@@ -478,6 +588,7 @@ function createEntryCard(entry) {
   const card = document.createElement('div');
   card.className = 'entry-card';
   card.setAttribute('role', 'listitem');
+  card.dataset.id = entry.id;
   card.innerHTML = `
     <div class="entry-cat-dot" style="background:${cat.bg}">
       <span>${cat.emoji}</span>
@@ -485,6 +596,10 @@ function createEntryCard(entry) {
     <div class="entry-body">
       <div class="entry-name">${entry.estabelecimento}</div>
       <div class="entry-meta">${entry.subcategoria} · ${entry.dataDisplay || entry.data}</div>
+      <div class="entry-actions">
+        <button class="action-btn edit-btn" data-id="${entry.id}" type="button" aria-label="Editar">✏️ Editar</button>
+        <button class="action-btn delete-btn" data-id="${entry.id}" type="button" aria-label="Excluir">🗑️ Excluir</button>
+      </div>
     </div>
     <div class="entry-right">
       <div class="entry-value">${fmtCurrencyShort(entry.valor)}</div>
@@ -493,6 +608,65 @@ function createEntryCard(entry) {
     <span class="entry-type-badge">${TYPE_LABELS[entry.tipo] || entry.tipo}</span>
   `;
   return card;
+}
+
+// ============================================================
+// EDIT / DELETE
+// ============================================================
+function editEntry(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+
+  state.editingId = id;
+
+  // Fill fields
+  document.getElementById('manual-valor').value           = entry.valor;
+  document.getElementById('manual-estabelecimento').value = entry.estabelecimento;
+  document.getElementById('manual-data').value            = entry.data;
+  document.getElementById('manual-subcategoria').value    = entry.subcategoria || '';
+
+  // Person
+  state.manualPerson = entry.pessoa;
+  setChips('manual-person-chips', 'manualPerson', entry.pessoa);
+
+  // Category
+  state.manualCategory = entry.categoria;
+  renderCategoryGrid('manual-category-grid', 'manualCategory');
+
+  // Reset installment (hide when editing — each entry is already one installment)
+  resetInstallment('manual');
+  document.getElementById('manual-payment-section').classList.add('hidden');
+
+  state.currentFileType = entry.tipo || 'manual';
+
+  // Update modal to show edit mode
+  document.querySelector('#manual-modal .modal-header h2').textContent = 'Editar lançamento';
+  document.getElementById('save-manual').textContent = '✓ Atualizar';
+
+  openModal('manual-modal');
+}
+
+function deleteEntry(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  const label = `"${entry.estabelecimento}" — ${fmtCurrencyShort(entry.valor)}`;
+  if (!confirm(`Excluir o lançamento ${label}?`)) return;
+
+  state.entries = state.entries.filter(e => e.id !== id);
+  saveEntries();
+  renderRecent();
+  updateSummary();
+  if (!document.getElementById('history-view').classList.contains('hidden')) {
+    renderHistory();
+  }
+  showToast('Lançamento excluído.', 'info');
+}
+
+function resetManualModal() {
+  state.editingId = null;
+  document.querySelector('#manual-modal .modal-header h2').textContent = 'Adicionar manualmente';
+  document.getElementById('save-manual').textContent = '✓ Salvar';
+  document.getElementById('manual-payment-section').classList.remove('hidden');
 }
 
 // ============================================================
@@ -649,16 +823,31 @@ function wireEvents() {
 
   // --- Manual ---
   document.getElementById('manual-btn').addEventListener('click', showManualModal);
-  document.getElementById('manual-close').addEventListener('click', () => closeModal('manual-modal'));
+  document.getElementById('manual-close').addEventListener('click', () => {
+    closeModal('manual-modal');
+    resetManualModal();
+  });
   document.getElementById('save-manual').addEventListener('click', saveManualEntry);
 
-  // Manual person chips
+  // Edit / Delete delegation (recent list + history list)
+  ['recent-list', 'history-list'].forEach(listId => {
+    document.getElementById(listId).addEventListener('click', e => {
+      const editBtn   = e.target.closest('.edit-btn');
+      const deleteBtn = e.target.closest('.delete-btn');
+      if (editBtn)   editEntry(editBtn.dataset.id);
+      if (deleteBtn) deleteEntry(deleteBtn.dataset.id);
+    });
+  });
+
+  // Manual person chips + installment
   bindChips('manual-person-chips', 'manualPerson');
+  bindInstallment('manual');
 
   // --- Confirm ---
   document.getElementById('confirm-cancel').addEventListener('click', () => closeModal('confirm-modal'));
   document.getElementById('save-entry').addEventListener('click', saveConfirmEntry);
   bindChips('person-chips', 'confirmPerson');
+  bindInstallment('confirm');
 
   // --- Settings ---
   document.getElementById('settings-btn').addEventListener('click', () => {
@@ -714,7 +903,10 @@ function wireEvents() {
   // Dismiss modals on backdrop click
   ['confirm-modal', 'manual-modal', 'settings-modal'].forEach(id => {
     document.getElementById(id).addEventListener('click', e => {
-      if (e.target === document.getElementById(id)) closeModal(id);
+      if (e.target === document.getElementById(id)) {
+        closeModal(id);
+        if (id === 'manual-modal') resetManualModal();
+      }
     });
   });
 }
